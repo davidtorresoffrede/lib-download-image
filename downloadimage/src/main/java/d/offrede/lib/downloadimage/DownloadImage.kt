@@ -12,35 +12,43 @@ import d.offrede.lib.downloadimage.DownloadImage.Companion.loadImageBitmap
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.net.HttpURLConnection
 import java.net.URL
 
 private const val TAG = "DownloadImage"
 
 fun ImageView.loadDownloadImage(
     id: String,
-    url: String
+    url: String,
+    firstOnline: Boolean = false
 ) {
-    if (hasImage(this.context, id)) {
+    if (!firstOnline && hasImage(this.context, id)) {
         this.setImageBitmap(
             loadImageBitmap(
                 this.context,
                 id
             )
         )
-        return
     } else {
         downloadImage(
             this.context,
             id,
-            url
-        ) {
-            this.setImageBitmap(
-                loadImageBitmap(
-                    this.context,
-                    id
-                )
-            )
-        }
+            url,
+            { imageBitmap ->
+                this.setImageBitmap(imageBitmap)
+            },
+            {
+                if (hasImage(this.context, id)) {
+                    Log.e(TAG, "Usando imagem salva em disco.")
+                    this.setImageBitmap(
+                        loadImageBitmap(
+                            this.context,
+                            id
+                        )
+                    )
+                }
+            }
+        )
     }
 }
 
@@ -50,20 +58,26 @@ class DownloadImage {
             context: Context,
             id: String,
             url: String,
-            event: () -> Unit = {}
+            success: (Bitmap) -> Unit = { _ -> },
+            failure: () -> Unit = {}
         ) {
-            DownloadImageTask { bitmap ->
-                bitmap?.let {
-                    saveImage(context, id, it, event)
+            DownloadImageTask(
+                { bitmap ->
+                    bitmap?.let {
+                        saveImage(context, id, it, success)
+                    }
+                },
+                {
+                    failure()
                 }
-            }.execute(url)
+            ).execute(url)
         }
 
         fun saveImage(
             context: Context,
             id: String,
             image: Bitmap,
-            event: () -> Unit = {}
+            event: (Bitmap) -> Unit = { _ -> }
         ) {
             val foStream: FileOutputStream
             try {
@@ -75,7 +89,7 @@ class DownloadImage {
                 e.printStackTrace()
             }
 
-            event()
+            event(image)
         }
 
         fun loadImageBitmap(
@@ -108,20 +122,32 @@ class DownloadImage {
 }
 
 private class DownloadImageTask(
-    private val event: (Bitmap?) -> Unit = { _ -> }
+    private val success: (Bitmap?) -> Unit = { _ -> },
+    private val failure: () -> Unit = {}
 ) : AsyncTask<String, Void, Bitmap>() {
 
     private fun downloadImageBitmap(
-        sUrl: String
+        url: String
     ): Bitmap? {
         var bitmap: Bitmap? = null
+
+        var urlConnection: HttpURLConnection? = null
         try {
-            val inputStream: InputStream = URL(sUrl).openStream() // Download Image from URL
-            bitmap = BitmapFactory.decodeStream(inputStream) // Decode Bitmap
-            inputStream.close()
+            val uri = URL(url)
+            urlConnection = uri.openConnection() as HttpURLConnection
+            if (urlConnection.responseCode == HttpURLConnection.HTTP_OK) {
+                val inputStream: InputStream = urlConnection.inputStream
+                bitmap = BitmapFactory.decodeStream(inputStream)
+            } else {
+                failure()
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Ocorreu um erro ao realizar o download da imagem.\nUrl: " + sUrl)
-            e.printStackTrace()
+            Log.e(TAG, "Ocorreu um erro ao realizar o download da imagem.\nUrl: " + url)
+            Log.d(TAG, e.toString())
+            urlConnection?.disconnect()
+            failure()
+        } finally {
+            urlConnection?.disconnect()
         }
         return bitmap
     }
@@ -137,7 +163,7 @@ private class DownloadImageTask(
     ) {
         super.onPostExecute(result)
         result?.let {
-            event(it)
+            success(it)
         }
     }
 }
