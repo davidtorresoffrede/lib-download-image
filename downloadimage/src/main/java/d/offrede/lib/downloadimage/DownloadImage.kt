@@ -58,8 +58,8 @@ class DownloadImage {
             context: Context,
             id: String,
             url: String,
-            success: (Bitmap) -> Unit = { _ -> },
-            failure: () -> Unit = {}
+            success: ((Bitmap) -> Unit)? = { _ -> },
+            failure: (() -> Unit)? = {}
         ) {
             DownloadImageTask(
                 { bitmap ->
@@ -68,7 +68,7 @@ class DownloadImage {
                     }
                 },
                 {
-                    failure()
+                    failure?.invoke()
                 }
             ).execute(url)
         }
@@ -77,7 +77,7 @@ class DownloadImage {
             context: Context,
             id: String,
             image: Bitmap,
-            event: (Bitmap) -> Unit = { _ -> }
+            event: ((Bitmap) -> Unit)? = { _ -> }
         ) {
             val foStream: FileOutputStream
             try {
@@ -89,7 +89,7 @@ class DownloadImage {
                 e.printStackTrace()
             }
 
-            event(image)
+            event?.invoke(image)
         }
 
         fun loadImageBitmap(
@@ -122,8 +122,8 @@ class DownloadImage {
 }
 
 private class DownloadImageTask(
-    private val success: (Bitmap?) -> Unit = { _ -> },
-    private val failure: () -> Unit = {}
+    private val success: ((Bitmap?) -> Unit)? = { _ -> },
+    private val failure: (() -> Unit)? = {}
 ) : AsyncTask<String, Void, Bitmap>() {
 
     private fun downloadImageBitmap(
@@ -139,13 +139,13 @@ private class DownloadImageTask(
                 val inputStream: InputStream = urlConnection.inputStream
                 bitmap = BitmapFactory.decodeStream(inputStream)
             } else {
-                failure()
+                failure?.invoke()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Ocorreu um erro ao realizar o download da imagem.\nUrl: " + url)
             Log.d(TAG, e.toString())
             urlConnection?.disconnect()
-            failure()
+            failure?.invoke()
         } finally {
             urlConnection?.disconnect()
         }
@@ -163,7 +163,7 @@ private class DownloadImageTask(
     ) {
         super.onPostExecute(result)
         result?.let {
-            success(it)
+            success?.invoke(it)
         }
     }
 }
