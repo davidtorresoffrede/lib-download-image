@@ -1,2 +1,2 @@
-include ':app', ':downloadimage'
+include ':downloadimage'
 rootProject.name='Sample'
