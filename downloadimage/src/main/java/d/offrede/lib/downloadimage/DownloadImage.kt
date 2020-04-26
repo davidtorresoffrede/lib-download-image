@@ -9,6 +9,9 @@ import android.widget.ImageView
 import d.offrede.lib.downloadimage.DownloadImage.Companion.downloadImage
 import d.offrede.lib.downloadimage.DownloadImage.Companion.hasImage
 import d.offrede.lib.downloadimage.DownloadImage.Companion.loadImageBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.runBlocking
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -60,17 +63,14 @@ class DownloadImage {
             url: String,
             success: ((Bitmap) -> Unit)? = { _ -> },
             failure: (() -> Unit)? = {}
-        ) {
-            DownloadImageTask(
-                { bitmap ->
-                    bitmap?.let {
-                        saveImage(context, id, it, success)
-                    }
-                },
-                {
-                    failure?.invoke()
+        ) = runBlocking<Unit> {
+            downloadImageFlow(url).collect { bitmap ->
+                bitmap?.let {
+                    saveImage(context, id, it, success)
                 }
-            ).execute(url)
+            }.runCatching {
+                failure?.invoke()
+            }
         }
 
         fun saveImage(
@@ -118,52 +118,27 @@ class DownloadImage {
             context: Context,
             imageName: String
         ) = context.getFileStreamPath("$imageName.png").delete()
-    }
-}
 
-private class DownloadImageTask(
-    private val success: ((Bitmap?) -> Unit)? = { _ -> },
-    private val failure: (() -> Unit)? = {}
-) : AsyncTask<String, Void, Bitmap>() {
-
-    private fun downloadImageBitmap(
-        url: String
-    ): Bitmap? {
-        var bitmap: Bitmap? = null
-
-        var urlConnection: HttpURLConnection? = null
-        try {
-            val uri = URL(url)
-            urlConnection = uri.openConnection() as HttpURLConnection
-            if (urlConnection.responseCode == HttpURLConnection.HTTP_OK) {
-                val inputStream: InputStream = urlConnection.inputStream
-                bitmap = BitmapFactory.decodeStream(inputStream)
-            } else {
-                failure?.invoke()
+        private fun downloadImageFlow(
+            url: String
+        ): Flow<Bitmap?> = flow {
+            var urlConnection: HttpURLConnection? = null
+            var bitmap: Bitmap? = null
+            try {
+                val uri = URL(url)
+                urlConnection = uri.openConnection() as HttpURLConnection
+                if (urlConnection.responseCode == HttpURLConnection.HTTP_OK) {
+                    val inputStream: InputStream = urlConnection.inputStream
+                    bitmap = BitmapFactory.decodeStream(inputStream)
+                }
+                emit(bitmap)
+            } catch (e: Exception) {
+                Log.e(TAG, "Ocorreu um erro ao realizar o download da imagem.\nUrl: " + url)
+                Log.d(TAG, e.toString())
+                urlConnection?.disconnect()
+            } finally {
+                urlConnection?.disconnect()
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Ocorreu um erro ao realizar o download da imagem.\nUrl: " + url)
-            Log.d(TAG, e.toString())
-            urlConnection?.disconnect()
-            failure?.invoke()
-        } finally {
-            urlConnection?.disconnect()
-        }
-        return bitmap
-    }
-
-    override fun doInBackground(
-        vararg params: String
-    ): Bitmap? {
-        return downloadImageBitmap(params[0])
-    }
-
-    override fun onPostExecute(
-        result: Bitmap?
-    ) {
-        super.onPostExecute(result)
-        result?.let {
-            success?.invoke(it)
-        }
+        }.flowOn(Dispatchers.IO)
     }
 }
