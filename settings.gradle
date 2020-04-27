@@ -1,3 +1,2 @@
 include ':downloadimage'
 rootProject.name='Sample'
-include ':sample'
