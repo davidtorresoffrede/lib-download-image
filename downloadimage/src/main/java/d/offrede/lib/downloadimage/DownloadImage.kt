@@ -3,15 +3,12 @@ package d.offrede.lib.downloadimage
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.os.AsyncTask
 import android.util.Log
 import android.widget.ImageView
 import d.offrede.lib.downloadimage.DownloadImage.Companion.downloadImage
 import d.offrede.lib.downloadimage.DownloadImage.Companion.hasImage
 import d.offrede.lib.downloadimage.DownloadImage.Companion.loadImageBitmap
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
@@ -33,51 +30,61 @@ fun ImageView.loadDownloadImage(
             )
         )
     } else {
-        downloadImage(
-            this.context,
-            id,
-            url,
-            { imageBitmap ->
-                this.setImageBitmap(imageBitmap)
-            },
-            {
-                if (hasImage(this.context, id)) {
-                    Log.e(TAG, "Usando imagem salva em disco.")
-                    this.setImageBitmap(
-                        loadImageBitmap(
-                            this.context,
-                            id
-                        )
-                    )
-                }
+        GlobalScope.launch {
+
+            val a = withContext(Dispatchers.IO) {
+                downloadImage(
+                    this@loadDownloadImage.context,
+                    id,
+                    url
+                )
             }
-        )
+
+            if (a) {
+                loadImageBitmap(
+                    this@loadDownloadImage.context,
+                    id
+                )
+            }
+        }
+
+
+//        { imageBitmap ->
+//            this.setImageBitmap(imageBitmap)
+//        },
+//        {
+//            if (hasImage(this.context, id)) {
+//                Log.e(TAG, "Usando imagem salva em disco.")
+//                this.setImageBitmap(
+//                    loadImageBitmap(
+//                        this.context,
+//                        id
+//                    )
+//                )
+//            }
+//        }
     }
 }
 
 class DownloadImage {
     companion object {
-        fun downloadImage(
+        suspend fun downloadImage(
             context: Context,
             id: String,
-            url: String,
-            success: ((Bitmap) -> Unit)? = { _ -> },
-            failure: (() -> Unit)? = {}
-        ) = runBlocking<Unit> {
-            downloadImageFlow(url).collect { bitmap ->
-                bitmap?.let {
-                    saveImage(context, id, it, success)
-                }
-            }.runCatching {
-                failure?.invoke()
-            }
+            url: String
+        ): Boolean {
+            downloadImageTask(
+                url
+            )?.let {
+                saveImage(context, id, it)
+                return true
+            } ?: return false
         }
 
         fun saveImage(
             context: Context,
             id: String,
-            image: Bitmap,
-            event: ((Bitmap) -> Unit)? = { _ -> }
+            image: Bitmap
         ) {
             val foStream: FileOutputStream
             try {
@@ -88,8 +95,6 @@ class DownloadImage {
                 Log.e(TAG, "Ocorreu um erro ao salvar a imagem.\nImage: " + id)
                 e.printStackTrace()
             }
-
-            event?.invoke(image)
         }
 
         fun loadImageBitmap(
@@ -119,11 +124,11 @@ class DownloadImage {
             imageName: String
         ) = context.getFileStreamPath("$imageName.png").delete()
 
-        private fun downloadImageFlow(
+        private suspend fun downloadImageTask(
             url: String
-        ): Flow<Bitmap?> = flow {
-            var urlConnection: HttpURLConnection? = null
+        ): Bitmap? {
             var bitmap: Bitmap? = null
+            var urlConnection: HttpURLConnection? = null
             try {
                 val uri = URL(url)
                 urlConnection = uri.openConnection() as HttpURLConnection
@@ -131,14 +136,13 @@ class DownloadImage {
                     val inputStream: InputStream = urlConnection.inputStream
                     bitmap = BitmapFactory.decodeStream(inputStream)
                 }
-                emit(bitmap)
             } catch (e: Exception) {
                 Log.e(TAG, "Ocorreu um erro ao realizar o download da imagem.\nUrl: " + url)
                 Log.d(TAG, e.toString())
-                urlConnection?.disconnect()
             } finally {
                 urlConnection?.disconnect()
+                return bitmap
             }
-        }.flowOn(Dispatchers.IO)
+        }
     }
 }
