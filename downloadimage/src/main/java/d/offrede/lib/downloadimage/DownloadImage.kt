@@ -30,8 +30,7 @@ fun ImageView.loadDownloadImage(
             )
         )
     } else {
-        GlobalScope.launch {
-
+        CoroutineScope(Dispatchers.Main).launch {
             val a = withContext(Dispatchers.IO) {
                 downloadImage(
                     this@loadDownloadImage.context,
@@ -41,34 +40,20 @@ fun ImageView.loadDownloadImage(
             }
 
             if (a) {
-                loadImageBitmap(
-                    this@loadDownloadImage.context,
-                    id
+                this@loadDownloadImage.setImageBitmap(
+                    loadImageBitmap(
+                        this@loadDownloadImage.context,
+                        id
+                    )
                 )
             }
         }
-
-
-//        { imageBitmap ->
-//            this.setImageBitmap(imageBitmap)
-//        },
-//        {
-//            if (hasImage(this.context, id)) {
-//                Log.e(TAG, "Usando imagem salva em disco.")
-//                this.setImageBitmap(
-//                    loadImageBitmap(
-//                        this.context,
-//                        id
-//                    )
-//                )
-//            }
-//        }
     }
 }
 
 class DownloadImage {
     companion object {
-        suspend fun downloadImage(
+        fun downloadImage(
             context: Context,
             id: String,
             url: String
@@ -124,7 +109,7 @@ class DownloadImage {
             imageName: String
         ) = context.getFileStreamPath("$imageName.png").delete()
 
-        private suspend fun downloadImageTask(
+        private fun downloadImageTask(
             url: String
         ): Bitmap? {
             var bitmap: Bitmap? = null
